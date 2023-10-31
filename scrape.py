@@ -8,14 +8,11 @@ list_url_format = 'https://phishtank.org/phish_search.php?page=@page@&valid=n&Se
 detail_url_format = 'https://phishtank.org/phish_detail.php?phish_id=@id@'
 exported_ids_file = 'phishtank_ids.csv'
 exported_urls_file = 'phishtank_urls.csv'
+exported_errors_file = 'phishtank_errors.csv'
 n = 10000
 scraped = 0
 urls = 0
 threads = []
-
-# clear file
-open(exported_ids_file, 'w').close()
-open(exported_urls_file, 'w').close()
 
 def fetch_and_wait(url):
     html = requests.get(url).text
@@ -45,22 +42,31 @@ def scrape(page):
         if len(cells) == 0:
             continue
         phish_id = cells[0].contents[0].text
-        with open(exported_ids_file, 'a') as id_f:
-            id_f.write(phish_id + '\n')
-        detail_html = fetch_and_wait(get_detail_url(phish_id))
-        detail_soup = BeautifulSoup(detail_html, 'html.parser')
-        spans = detail_soup.find_all('span')
-        if len(spans) < 3:
-            print(f'No URL found for id {phish_id}. See "html/{phish_id}.html".')
-            with open(f'failed_htmls/{phish_id}.html', 'w') as f:
-                f.write(detail_html)
-            continue
+        with (open(exported_ids_file, 'r')) as id_f:
+            if phish_id in id_f.read():
+                print(f'Skipping id {phish_id} because it has already been scraped.')
+                continue
+        try:
+            detail_html = fetch_and_wait(get_detail_url(phish_id))
+            detail_soup = BeautifulSoup(detail_html, 'html.parser')
+            spans = detail_soup.find_all('span')
+            with open(exported_ids_file, 'a') as id_f:
+                id_f.write(phish_id + '\n')
+            if len(spans) < 3:
+                print(f'No URL found for id {phish_id}. See "failed_html/{phish_id}.html".')
+                with open(f'failed_htmls/{phish_id}.html', 'w') as f:
+                    f.write(detail_html)
+                continue
 
-        urls += 1
-        url = spans[2].contents[0].text
-        with open(exported_urls_file, 'a') as url_f:
-            url_f.write(url + '\n')
-        print(f'Scraped page {page}. Total URLs collected: {urls}')
+            urls += 1
+            url = spans[2].contents[0].text
+            with open(exported_urls_file, 'a') as url_f:
+                url_f.write(url + '\n')
+            print(f'Scraped page {page}. Total URLs collected: {urls}')
+        except:
+            print(f'Error scraping id {phish_id}.')
+            with open(exported_errors_file, 'a') as error_f:
+                error_f.write(phish_id + '\n')
     
     scraped += 1
 
